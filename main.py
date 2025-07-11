@@ -1,105 +1,73 @@
-import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
 import os
-from datetime import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# تنظیمات لاگ
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+PORT = int(os.environ.get('PORT', 10000))
 
-# متن نمایشی قبل از استارت
+# متن پیش‌نمایش قبل از استارت
 PRE_START_MESSAGE = """
-🟢 <b>کاربر عزیز</b> <code>{user_name}</code> 👋
+🟣 <b>کاربر عزیز {user_name} عزیز</b> 🟣
 
-📌 این ربات مطالب جستجو شده را در کانال زیر با ذکر منبع منتشر می‌کند:
-🔗 <a href="https://t.me/archive_bot_shirazi">کانال آرشیو مطالب</a>
+📚 این ربات مطالب جستجو شده را در کانال زیر منتشر می‌کند:
+👉 <a href="https://t.me/archive_bot_shirazi">کانال آرشیو مطالب</a>
 
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-✨ <b>برای شروع دکمه استارت را بزنید</b> ✨
+✨ <b>برای شروع دکمه /start را بزنید</b> ✨
 """
 
 # متن صفحه اصلی
-WELCOME_MESSAGE = """
-🎉 <b>به ربات جستجوگر پیشرفته خوش آمدید!</b>
+START_MESSAGE = """
+🎯 <b>ربات جستجوی حرفه‌ای فعال شد!</b>
 
-🔍 <i>امکانات ربات:</i>
+🔍 امکانات ربات:
 • جستجوی هوشمند در منابع
 • آرشیو خودکار مطالب
 • ذخیره‌سازی ابری
 
-🛠 <b>طراحی و توسعه:</b>
-👤 <code>شیرازی</code>
+📌 <i>طراحی شده توسط شیرازی</i>
 📞 <code>09031701895</code>
-📢 @shirazi_ai
-
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
 """
 
-# دکمه‌های صفحه اصلی
-keyboard = [
-    [InlineKeyboardButton("🚀 شروع جستجو", callback_data='search')],
-    [InlineKeyboardButton("📚 آرشیو من", callback_data='archive')],
-    [InlineKeyboardButton("⚙️ تنظیمات پیشرفته", callback_data='settings')],
-    [InlineKeyboardButton("📣 کانال آرشیو", url='https://t.me/archive_bot_shirazi')]
-]
-
 async def pre_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler برای پیام اولیه قبل از استارت"""
-    user = update.effective_user
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=PRE_START_MESSAGE.format(user_name=user.first_name or "کاربر"),
-        parse_mode='HTML',
-        disable_web_page_preview=True
-    )
+    """پیام قبل از شروع"""
+    if update.message and not update.message.text.startswith('/'):
+        user = update.effective_user
+        await update.message.reply_text(
+            text=PRE_START_MESSAGE.format(user_name=user.first_name),
+            parse_mode='HTML',
+            disable_web_page_preview=True
+        )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler برای دستور /start"""
-    user = update.effective_user
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    """دستور استارت"""
+    keyboard = [
+        [InlineKeyboardButton("🔍 شروع جستجو", callback_data='search')],
+        [InlineKeyboardButton("📌 کانال آرشیو", url='https://t.me/archive_bot_shirazi')]
+    ]
     
-    # انیمیشن تایپ کردن
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    
-    # ارسال پیام خوش‌آمدگویی با طراحی حرفه‌ای
     await update.message.reply_text(
-        text=f"👋 <b>سلام {user.mention_markdown_v2()}</b>\n" + WELCOME_MESSAGE,
-        reply_markup=reply_markup,
-        parse_mode='HTML',
-        disable_web_page_preview=True
+        text=START_MESSAGE,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML'
     )
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler برای دکمه‌های اینلاین"""
-    query = update.callback_query
-    await query.answer()
+def main():
+    app = Application.builder().token(TOKEN).build()
     
-    if query.data == 'search':
-        await query.edit_message_text(
-            text="🔍 <b>حالت جستجوی پیشرفته</b>\n\nلطفا عبارت مورد نظر خود را وارد کنید:",
-            parse_mode='HTML'
+    # اضافه کردن هندلرها
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, pre_start))
+    
+    # تنظیمات اجرا
+    if os.getenv('RENDER'):
+        app.run_webhook(
+            listen='0.0.0.0',
+            port=PORT,
+            url_path=TOKEN,
+            webhook_url=f'https://your-bot-name.onrender.com/{TOKEN}'
         )
     else:
-        await query.edit_message_text(
-            text="⚡ <b>این بخش به زودی فعال خواهد شد</b>\n\n@shirazi_ai",
-            parse_mode='HTML'
-        )
-
-def main():
-    """اجرای اصلی ربات"""
-    application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
-    
-    # اضافه کردن handlerها
-    application.add_handler(MessageHandler(filters.ALL, pre_start), group=0)
-    application.add_handler(CommandHandler('start', start), group=1)
-    application.add_handler(CallbackQueryHandler(button_handler))
-    
-    # اجرای ربات
-    application.run_polling()
+        app.run_polling()
 
 if __name__ == '__main__':
     main()
